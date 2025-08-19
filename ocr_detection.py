@@ -20,7 +20,7 @@ def detect_text(frame):
     details = pytesseract.image_to_data(processed, output_type=Output.DICT, config=custom_config, lang='eng')
     
     for i in range(len(details['text'])):
-        if int(details['conf'][i]) > 30:
+        if int(details['conf'][i]) > 50:
             x, y, w, h = details['left'][i], details['top'][i], details['width'][i], details['height'][i]
             cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
             cv2.putText(frame, details['text'][i], (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
@@ -29,7 +29,6 @@ def detect_text(frame):
 def main():
     cap = cv2.VideoCapture(0)
     
-    # Key change: Remove ALL flip operations    
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -39,7 +38,7 @@ def main():
         output_frame = detect_text(frame)
         
         cv2.imshow('Correct Text Detection', output_frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+        if cv2.waitKey(1) & 0xFF == ord('q'): #kill btn
             break
     
     cap.release()
