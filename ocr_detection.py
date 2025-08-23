@@ -4,15 +4,15 @@ from pytesseract import Output
 import numpy as np
 import mysql.connector
 
-# Tesseract path (update if needed)
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+# Tesseract path
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'# need tesseract
 
-# Database connection (update with your credentials)
+
 db = mysql.connector.connect(
     host="localhost",
     user="root",
     password="",
-    database="voir_db"  # your DB name
+    database="voir_db"  
 )
 cursor = db.cursor()
 
@@ -77,10 +77,10 @@ def main():
         if not ret:
             break
         
-        # Process the frame 
+        # Process frame 
         output_frame = detect_text(frame)
         
-        cv2.imshow('License Plate OCR', output_frame)
+        cv2.imshow('VOIR', output_frame)
         if cv2.waitKey(1) & 0xFF == ord('q'): #kill btn
             break
     

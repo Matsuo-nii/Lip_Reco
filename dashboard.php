@@ -3,156 +3,170 @@
 session_start();
 require_once __DIR__ . '/db.php';
 
-// Optional: gate by login/role if your old backend sets these
-// if (empty($_SESSION['user_id'])) { header('Location: login.php'); exit; }
+// --- Fetch Stats ---
+// Registered vehicles (total)
+$totalVehicles = $conn->query("SELECT COUNT(*) as c FROM vehicles")->fetch_assoc()['c'] ?? 0;
 
-$vehicleCounts = ['car' => 0, 'motorcycle' => 0, 'van' => 0];
-$guards = [];
-$error = null;
+// Cars
+$totalCars = $conn->query("SELECT COUNT(*) as c FROM vehicles WHERE type='car'")->fetch_assoc()['c'] ?? 0;
 
-// --- Fetch vehicle counts grouped by type ---
-try {
-    $sql = "SELECT type, COUNT(*) AS cnt FROM vehicles GROUP BY type";
-    $res = $conn->query($sql);
-    if ($res) {
-        while ($row = $res->fetch_assoc()) {
-            $type = strtolower($row['type'] ?? '');
-            if (isset($vehicleCounts[$type])) {
-                $vehicleCounts[$type] = (int)$row['cnt'];
-            }
-        }
-        $res->free();
-    } else {
-        $error = "Failed to fetch vehicle counts.";
-    }
-} catch (Throwable $t) {
-    $error = "Error fetching vehicles: " . $t->getMessage();
-}
+// Motorcycles
+$totalMotorcycles = $conn->query("SELECT COUNT(*) as c FROM vehicles WHERE type='motorcycle'")->fetch_assoc()['c'] ?? 0;
 
-// Compute "registered" same as Flutter: sum of all types
-$registered = $vehicleCounts['car'] + $vehicleCounts['motorcycle'] + $vehicleCounts['van'];
+// Vans
+$totalVans = $conn->query("SELECT COUNT(*) as c FROM vehicles WHERE type='van'")->fetch_assoc()['c'] ?? 0;
 
-// --- Fetch on-duty guards (adjust if your schema differs) ---
-try {
-    // If your table uses `status='available'`, switch WHERE on_duty = 1 to WHERE status = 'available'
-    $stmt = $conn->prepare("SELECT name FROM guards WHERE on_duty = 1 ORDER BY name");
-    $stmt->execute();
-    $res = $stmt->get_result();
-    while ($row = $res->fetch_assoc()) {
-        $guards[] = $row['name'];
-    }
-    $stmt->close();
-} catch (Throwable $t) {
-    $error = "Error fetching guards: " . $t->getMessage();
-}
+// Guards available
+$availableGuards = $conn->query("SELECT COUNT(*) as c FROM guards WHERE status='available'")->fetch_assoc()['c'] ?? 0;
 
+// --- Fetch Vehicles Table Data ---
+$vehicleData = $conn->query("SELECT * FROM vehicles ORDER BY registered_at DESC");
 ?>
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="utf-8" />
-    <title>Voir — Dashboard</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <!-- Bootstrap -->
-    <link rel="preconnect" href="https://cdn.jsdelivr.net" />
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
-    <style>
-        body { background:#f7f7f7; }
-        .card-red { background:#dc3545; color:#fff; }
-        .icon-lg { font-size:2rem; }
-        .stat { font-weight:700; font-size:1.25rem; }
-    </style>
-</head>
-<body>
-<nav class="navbar navbar-light bg-white border-bottom sticky-top">
-    <div class="container">
-        <span class="navbar-brand mb-0 h1 text-danger">Voir</span>
-        <div class="d-flex align-items-center gap-3">
-            <!-- Optional role/user display -->
-            <?php if (!empty($_SESSION['role'])): ?>
-                <span class="badge text-bg-light">Role: <?= htmlspecialchars($_SESSION['role']) ?></span>
-            <?php endif; ?>
-            <!-- <a class="btn btn-outline-secondary btn-sm" href="logout.php">Logout</a> -->
-        </div>
-    </div>
-</nav>
-
-<main class="container py-4">
-    <?php if ($error): ?>
-        <div class="alert alert-warning"><?= htmlspecialchars($error) ?></div>
-    <?php endif; ?>
-
-    <!-- Registered Count -->
-    <div class="card card-red mb-4">
-        <div class="card-body d-flex align-items-center">
-            <div class="me-3">
-                <i class="bi bi-people-fill icon-lg"></i>
-            </div>
-            <div>
-                <div class="stat"><?= (int)$registered ?> registered</div>
-                <div class="small opacity-75">Total vehicles (car + motorcycle + van)</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Vehicle Icons Row -->
-    <div class="row g-3 mb-4">
-        <div class="col-12 col-md-4">
-            <div class="card h-100">
-                <div class="card-body d-flex align-items-center gap-3">
-                    <span class="text-danger icon-lg">🚗</span>
-                    <div>
-                        <div class="fw-semibold">Cars</div>
-                        <div class="stat text-danger"><?= (int)$vehicleCounts['car'] ?></div>
+    <head>
+        <meta charset="utf-8" />
+        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+        <title>Dashboard - Voir</title>
+        <link href="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/style.min.css" rel="stylesheet" />
+        <link href="css/styles.css" rel="stylesheet" />
+        <link href="css/dashboard-cards.css" rel="stylesheet" />
+        <script src="https://use.fontawesome.com/releases/v6.3.0/js/all.js" crossorigin="anonymous"></script>
+    </head>
+    <body class="sb-nav-fixed">
+        <nav class="sb-topnav navbar navbar-expand navbar-dark bg-dark">
+            <a class="navbar-brand ps-3" href="dashboard.php">Voir</a>
+            <button class="btn btn-link btn-sm order-1 order-lg-0 me-4 me-lg-0" id="sidebarToggle"><i class="fas fa-bars"></i></button>
+            <ul class="navbar-nav ms-auto ms-md-0 me-3 me-lg-4">
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" id="navbarDropdown" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="fas fa-user fa-fw"></i></a>
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdown">
+                        <li><a class="dropdown-item" href="logout.php">Logout</a></li>
+                    </ul>
+                </li>
+            </ul>
+        </nav>
+        <div id="layoutSidenav">
+            <div id="layoutSidenav_nav">
+                <nav class="sb-sidenav accordion sb-sidenav-dark" id="sidenavAccordion">
+                    <div class="sb-sidenav-menu">
+                        <div class="nav">
+                            <a class="nav-link" href="dashboard.php">
+                                <div class="sb-nav-link-icon"><i class="fas fa-tachometer-alt"></i></div>
+                                Dashboard
+                            </a>
+                        </div>
                     </div>
-                </div>
+                </nav>
             </div>
-        </div>
-        <div class="col-12 col-md-4">
-            <div class="card h-100">
-                <div class="card-body d-flex align-items-center gap-3">
-                    <span class="text-danger icon-lg">🏍️</span>
-                    <div>
-                        <div class="fw-semibold">Motorcycles</div>
-                        <div class="stat text-danger"><?= (int)$vehicleCounts['motorcycle'] ?></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-12 col-md-4">
-            <div class="card h-100">
-                <div class="card-body d-flex align-items-center gap-3">
-                    <span class="text-danger icon-lg">🚐</span>
-                    <div>
-                        <div class="fw-semibold">Vans</div>
-                        <div class="stat text-danger"><?= (int)$vehicleCounts['van'] ?></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+            <div id="layoutSidenav_content">
+                <main>
+                    <div class="container-fluid px-4">
+                        <h1 class="mt-4">Dashboard</h1>
+                        <ol class="breadcrumb mb-4">
+                            <li class="breadcrumb-item active">Dashboard</li>
+                        </ol>
 
-    <!-- Available Guards -->
-    <div class="card border-danger">
-        <div class="card-header bg-danger text-white">
-            Available Guards (<?= count($guards) ?>)
-        </div>
-        <div class="card-body p-0">
-            <?php if (empty($guards)): ?>
-                <div class="p-3 text-muted fst-italic">No guards on duty.</div>
-            <?php else: ?>
-                <ul class="list-group list-group-flush">
-                    <?php foreach ($guards as $g): ?>
-                        <li class="list-group-item"><?= htmlspecialchars($g) ?></li>
-                    <?php endforeach; ?>
-                </ul>
-            <?php endif; ?>
-        </div>
-    </div>
-</main>
+                        <!-- Dashboard Cards -->
+                        <div class="row">
+                            <div class="col-xl-3 col-md-6 mb-4">
+                                <div class="card bg-danger text-white h-100">
+                                    <div class="card-body d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <div class="fs-1 fw-bold"><?php echo $totalVehicles; ?></div>
+                                            <div class="text-uppercase">Registered Vehicles</div>
+                                        </div>
+                                        <i class="fas fa-car fa-4x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-xl-3 col-md-6 mb-4">
+                                <div class="card bg-primary text-white h-100">
+                                    <div class="card-body d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <div class="fs-1 fw-bold"><?php echo $totalCars; ?></div>
+                                            <div class="text-uppercase">Cars</div>
+                                        </div>
+                                        <i class="fas fa-car-side fa-4x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-xl-3 col-md-6 mb-4">
+                                <div class="card bg-success text-white h-100">
+                                    <div class="card-body d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <div class="fs-1 fw-bold"><?php echo $totalMotorcycles; ?></div>
+                                            <div class="text-uppercase">Motorcycles</div>
+                                        </div>
+                                        <i class="fas fa-motorcycle fa-4x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-xl-3 col-md-6 mb-4">
+                                <div class="card bg-warning text-white h-100">
+                                    <div class="card-body d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <div class="fs-1 fw-bold"><?php echo $totalVans; ?></div>
+                                            <div class="text-uppercase">Vans</div>
+                                        </div>
+                                        <i class="fas fa-shuttle-van fa-4x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-xl-3 col-md-6 mb-4">
+                                <div class="card bg-info text-white h-100">
+                                    <div class="card-body d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <div class="fs-1 fw-bold"><?php echo $availableGuards; ?></div>
+                                            <div class="text-uppercase">Guards Available</div>
+                                        </div>
+                                        <i class="fas fa-user-shield fa-4x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
 
-<!-- Bootstrap JS + Icons -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
-</body>
+                        <!-- Vehicles Table -->
+                        <div class="card mb-4">
+                            <div class="card-header"><i class="fas fa-table me-1"></i> Registered Vehicles</div>
+                            <div class="card-body">
+                                <table id="datatablesSimple">
+                                    <thead>
+                                        <tr>
+                                            <th>Owner</th>
+                                            <th>Vehicle Type</th>
+                                            <th>License Plate</th>
+                                            <th>Category</th>
+                                            <th>SR Code</th>
+                                            <th>Registered At</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php while($row = $vehicleData->fetch_assoc()): ?>
+                                            <tr>
+                                                <td><?php echo htmlspecialchars($row['owner_name']); ?></td>
+                                                <td><?php echo htmlspecialchars(ucfirst($row['type'])); ?></td>
+                                                <td><?php echo htmlspecialchars($row['license_plate']); ?></td>
+                                                <td><?php echo htmlspecialchars($row['category']); ?></td>
+                                                <td><?php echo htmlspecialchars($row['sr_code']); ?></td>
+                                                <td><?php echo htmlspecialchars($row['registered_at']); ?></td>
+                                            </tr>
+                                        <?php endwhile; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </main>
+            </div>
+        </div>
+
+        <!-- Scripts -->
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+        <script src="js/scripts.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/umd/simple-datatables.min.js"></script>
+        <script src="js/datatables-simple-demo.js"></script>
+    </body>
 </html>
+<?php $conn->close(); ?>
