@@ -62,10 +62,21 @@ def detect_text(frame):
             cv2.putText(frame, f"AUTHORIZED: {plate_candidate}", (50, 50),
                         cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 3)
             print(f"✅ Authorized vehicle detected: {plate_candidate}")
+
+            # INSERT log into DB
+            cursor.execute("INSERT INTO ocr_logs (license_plate, status) VALUES (%s, %s)", 
+                           (plate_candidate, 'authorized'))
+            db.commit()
+
         else:
             cv2.putText(frame, f"UNAUTHORIZED: {plate_candidate}", (50, 50),
                         cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
             print(f"❌ Unauthorized vehicle detected: {plate_candidate}")
+
+            # INSERT log into DB
+            cursor.execute("INSERT INTO ocr_logs (license_plate, status) VALUES (%s, %s)", 
+                           (plate_candidate, 'unauthorized'))
+            db.commit()
 
     return frame
 

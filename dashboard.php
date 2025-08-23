@@ -21,6 +21,10 @@ $availableGuards = $conn->query("SELECT COUNT(*) as c FROM guards WHERE status='
 
 // --- Fetch Vehicles Table Data ---
 $vehicleData = $conn->query("SELECT * FROM vehicles ORDER BY registered_at DESC");
+
+// --- OCR Logs --- 
+$sql = "SELECT license_plate, detected_at FROM ocr_logs ORDER BY detected_at DESC LIMIT 20";
+$result = $conn->query($sql);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -67,7 +71,6 @@ $vehicleData = $conn->query("SELECT * FROM vehicles ORDER BY registered_at DESC"
                         <ol class="breadcrumb mb-4">
                             <li class="breadcrumb-item active">Dashboard</li>
                         </ol>
-
                         <!-- Dashboard Cards -->
                         <div class="row">
                             <div class="col-xl-3 col-md-6 mb-4">
@@ -155,6 +158,19 @@ $vehicleData = $conn->query("SELECT * FROM vehicles ORDER BY registered_at DESC"
                                         <?php endwhile; ?>
                                     </tbody>
                                 </table>
+                         <h2>OCR Detection Logs</h2>
+                            <table border="1" cellpadding="10">
+                                <tr>
+                                    <th>License Plate</th>
+                                    <th>Detected At</th>
+                                </tr>
+                                <?php while($row = $result->fetch_assoc()): ?>
+                                <tr>
+                                    <td><?php echo $row['license_plate']; ?></td>
+                                    <td><?php echo $row['detected_at']; ?></td>
+                                </tr>
+                                <?php endwhile; ?>
+                            </table>
                             </div>
                         </div>
                     </div>
